@@ -4,7 +4,7 @@ const moment = require("moment");
 const fs = require("fs");
 const app = express();
 const cors = require("cors");
-const filename = `monthlyOrders_${moment().format("MM-YYYY")}.xlsx`;
+const filename = `orderData/monthlyOrders_${moment().format("MM-YYYY")}.xlsx`;
 const workbook = new ExcelJS.Workbook();
 app.use(cors());
 // Define route to create or update Excel file
@@ -12,7 +12,7 @@ app.use(cors());
 
 app.get("/getMenu", (req, res) => {
     // Load the Excel file
-    const filename = `menu.xlsx`;
+    const filename = `orderData/menu.xlsx`;
     const workbook = new ExcelJS.Workbook();
     workbook.xlsx
         .readFile(filename)
