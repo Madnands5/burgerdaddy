@@ -4,7 +4,9 @@ const moment = require("moment");
 const fs = require("fs");
 const app = express();
 const cors = require("cors");
-const filename = `orderData/monthlyOrders_${moment().format("MM-YYYY")}.xlsx`;
+import path from 'path';
+
+const filename = path.join(process.cwd(), 'files', 'orderData/monthlyOrders_${moment().format("MM-YYYY")}.xlsx');
 const workbook = new ExcelJS.Workbook();
 app.use(cors());
 // Define route to create or update Excel file
