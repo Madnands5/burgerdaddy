@@ -1,204 +1,125 @@
-const express = require("express");
-const ExcelJS = require("exceljs");
-const moment = require("moment");
-const fs = require("fs");
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const cors = require('cors');
 const app = express();
-const cors = require("cors");
+app.use(bodyParser.json());
 
-const filename = `orderData/monthlyOrders_${moment().format("MM-YYYY")}.xlsx`;
-const workbook = new ExcelJS.Workbook();
+mongoose.connect('mongodb+srv://madnands5:Rahul100@burgerorderdb.rrnfklw.mongodb.net/?retryWrites=true&w=majority', { useNewUrlParser: true, useUnifiedTopology: true });
+
+const menuSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    cost: { type: Number, required: true },
+});
+
+const Menu = mongoose.model('Menu', menuSchema);
+const orderSchema = new mongoose.Schema({
+
+    token: { type: Number, required: true },
+    order_items: { type: Array, required: true },
+    total: { type: Number, required: true },
+    status: { type: String, default: 'PENDING' },
+    date: { type: Date, default: Date.now },
+});
+
+const Order = mongoose.model('Order', orderSchema);
 app.use(cors());
-// Define route to create or update Excel file
-
-
-app.get("/getMenu", (req, res) => {
-    // Load the Excel file
-    const filename = `orderData/menu.xlsx`;
-    const workbook = new ExcelJS.Workbook();
-    workbook.xlsx
-        .readFile(filename)
-        .then(() => {
-            // Get the worksheet
-            const worksheet = workbook.getWorksheet('Sheet1');
-
-            // Define an array to hold the row data
-            const rowsWithAge10 = [];
-
-            // Iterate over each row in the worksheet
-            const rows = [];
-            worksheet.eachRow((row, rowNumber) => {
-                // Convert the row to a JSON object
-
-                rows.push(
-                    row.values.filter((v) => {
-                        return v != null;
-                    })
-                );
-            });
-            // Return the filtered rows as JSON
-            res.json(rows);
-        })
-        .catch((error) => {
-            console.error(`Error reading Excel file: ${error}`);
-            res.status(500).json("Error reading Excel file");
-        });
-});
-
-app.get("/init", (req, res) => {
-    // Generate filename with today's date
-    if (fs.existsSync(filename)) {
-        res.status(200).json(`Excel file ${filename} aleady exists!`);
+app.post('/menu', async (req, res) => {
+    const menuItems = req.body.menu;
+    console.log(menuItems)
+    let menuSuccess = await Menu.insertMany(menuItems);
+    if (!menuSuccess) {
+        res.status(400).json(err);
     } else {
-        workbook.addWorksheet(moment().format("DD-MM-YYYY"));
-        workbook.xlsx
-            .writeFile(filename)
-            .then(() => {
-                console.log(`Excel file ${filename} saved successfully!`);
-                res.status(200).json(`Excel file ${filename} saved successfully!`);
-            })
-            .catch((error) => {
-                console.error(`Error saving Excel file: ${error}`);
-                res.status(500).json(`Error saving Excel file: ${error}`);
-            });
+        res.json(`${menuSuccess.length} menu item(s) added`);
     }
-});
-app.post("/create-order/:order/:status/:payment/:total", (req, res) => {
-    console.log(req)
-    if (fs.existsSync(filename)) {
-        // read worksheet and add headers
-        try {
-            workbook.xlsx
-                .readFile(filename)
-                .then(function () {
-                    // Access the first worksheet in the workbook
-                    const worksheet = workbook.getWorksheet(
-                        moment().format("DD-MM-YYYY")
-                    );
-                    const nextRowNumber = worksheet.rowCount + 1;
 
-                    const newRowData = [
-                        nextRowNumber,
-                        req.params.order,
-                        req.params.status,
-                        req.params.payment,
-                        req.params.total,
-                    ];
-                    const newRow = worksheet.addRow(newRowData);
-                    return workbook.xlsx.writeFile(filename);
-                })
-                .then(function () {
-                    console.log("Row added to worksheet");
-                    res.status(200).json(`Excel file ${filename} saved successfully!`);
-                })
-                .catch(function (error) {
-                    console.log("Error:", error);
-                    res.status(500).json(`Error updating Excel file: ${error}`);
-                });
-        } catch (error) {
-            console.error(`Error saving Excel file: ${error}`);
-            res.status(500).json(`Error saving Excel file: ${error}`);
-        }
+});
+
+app.get('/menu', async (req, res) => {
+    const menu = await Menu.find({});
+    res.json(menu);
+
+});
+
+
+app.post('/order', async (req, res) => {
+    const order = new Order({
+        order_items: req.body.order_items,
+        total: req.body.total,
+        status: req.body.status,
+        date: new Date().toISOString().slice(0, 10),
+        time: new Date().toISOString().slice(11, 19),
+    });
+    let count = await Order.find({ date: order.date });
+    console.log(count);
+    order.token = count ? count.length + 1 : 1;
+    order.save().then(() => {
+        res.json(`Order created with token number ${order.token}`);
+    }).catch(err => {
+        res.sendStatus(400)
+    })
+});
+
+app.get('/order/today', async (req, res) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const order = await Order.find({ date: { $gte: today, $lt: tomorrow } });
+    res.json(order);
+});
+app.get('/order/incomplete', async (req, res) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const order = await Order.find({ status: 'Pending', date: { $gte: today, $lt: tomorrow } });
+    res.json(order);
+});
+
+app.post('/order-completed/:id', async (req, res) => {
+    let = order = await Order.findByIdAndUpdate(req.params.id, { status: 'COMPLETED' }, { new: true })
+    if (order) {
+        res.json('Completed');
     } else {
-        console.log(`Excel file ${filename} not found `);
-        res.status(200).json(`Excel file ${filename} not found`);
+        res.json("logged err", 500)
     }
+
 });
 
-app.get("/view-incomplete-orders", (req, res) => {
-    // Load the Excel file
-    workbook.xlsx
-        .readFile(filename)
-        .then(() => {
-            // Get the worksheet
-            const worksheet = workbook.getWorksheet(moment().format("DD-MM-YYYY"));
-
-            // Define an array to hold the row data
-            const rowsWithAge10 = [];
-
-            // Iterate over each row in the worksheet
-            const rows = [];
-            worksheet.eachRow((row, rowNumber) => {
-                const status = row.getCell(3).value; // Assuming status is in column C
-                if (row.values && status === "Pending") {
-                    // Convert the row to a JSON object
-
-                    rows.push(
-                        row.values.filter((v) => {
-                            return v != null;
-                        })
-                    );
-                }
-            });
-
-            // Return the filtered rows as JSON
-            res.json(rows);
-        })
-        .catch((error) => {
-            console.error(`Error reading Excel file: ${error}`);
-            res.status(500).json("Error reading Excel file");
-        });
+app.get('/order/month', async (req, res) => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    let orders = await Order.find({ date: { $gte: startOfMonth, $lte: endOfMonth } });
+    res.json(orders);
 });
 
-app.get("/view-all-orders", (req, res) => {
-    // Load the Excel file
-    workbook.xlsx
-        .readFile(filename)
-        .then(() => {
-            // Get the worksheet
-            const worksheet = workbook.getWorksheet(moment().format("DD-MM-YYYY"));
-
-            // Define an array to hold the row data
-            const rowsWithAge10 = [];
-
-            // Iterate over each row in the worksheet
-            const rows = [];
-            worksheet.eachRow((row, rowNumber) => {
-                // Convert the row to a JSON object
-
-                rows.push(
-                    row.values.filter((v) => {
-                        return v != null;
-                    })
-                );
-            });
-            // Return the filtered rows as JSON
-            res.json(rows);
-        })
-        .catch((error) => {
-            console.error(`Error reading Excel file: ${error}`);
-            res.status(500).json("Error reading Excel file");
-        });
-});
-app.post("/order-completed/:rowNumber", (req, res) => {
-    workbook.xlsx
-        .readFile(filename)
-        .then(() => {
-            // Get the worksheet
-            const worksheet = workbook.getWorksheet(moment().format("DD-MM-YYYY"));
-            const rowNumber = parseInt(req.params.rowNumber);
-            // replace 'Sheet1' with the actual sheet name
-
-            // Find the row with the given row number
-            const row = worksheet.findRow(rowNumber, 1);
-
-            if (!row) {
-                return res.status(404).json(`Row ${rowNumber} not found.`);
-            }
-            row.getCell(3).value = "Complete";
-            row.getCell(4).value = "Yes";
-            // Save the changes
-            workbook.xlsx.writeFile(filename);
-            return res.json(
-                `status Updated.`,
-            );
-        })
-        .catch((error) => {
-            console.error(`Error reading Excel file: ${error}`);
-            res.status(500).json("Error reading Excel file");
-        });
+app.get('/order/year', async (req, res) => {
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const endOfYear = new Date(now.getFullYear(), 11, 31);
+    let order = await Order.find({ date: { $gte: startOfYear, $lte: endOfYear } });
+    res.json(order);
 });
 
+app.delete('/order', async (req, res) => {
+    let order = await Order.deleteMany();
+    res.json(order);
 
+});
+app.get('/order/financial-year', async (req, res) => {
+    const now = new Date();
+    const startOfFinancialYear = new Date(now.getFullYear() - 1, 6, 1);
+    const endOfFinancialYear = new Date(now.getFullYear(), 5, 30);
+    let orders = await Order.find({ date: { $gte: startOfFinancialYear, $lte: endOfFinancialYear } })
+    res.json(orders);
+});
+app.delete('/menu', async (req, res) => {
+    let order = await Menu.deleteMany();
+    res.json(order);
+});
 // Start server
 app.listen(process.env.PORT || 3000, () => {
     console.log("Server listening on port 3000!");
